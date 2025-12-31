@@ -62,13 +62,14 @@ Lists are named: `List: [comment] ([group])`
 - Python 3
 
 Tested on:
-- Pi-hole v6.1.2, FTL v6.2.3, Web v6.2.1
-- Domoticz 2024.7
+- Pi-hole > v6.1.2, FTL > v6.2.3, Web > v6.2.1
+- Domoticz 2025.2
 
 ## Credits
 
 - Original concept: [Xorfor](https://forum.domoticz.com/viewtopic.php?t=20834)
 - Author: Wojtek Sawasciuk <voyo@no-ip.pl>
+- Author: Jan Reimen 
 
 ## License
 
