@@ -17,7 +17,7 @@
         Enter your Pi-hole URL (e.g., http://10.0.20.4 or http://pi.hole) and Web Interface password.
         For HTTPS with self-signed certificates, provide the path to your certificate chain file (chain.pem).
         <h3>Documentation</h3>
-        See: <a href="https://github.com/voyo/Domoticz_PiHole-Control">https://github.com/voyo/Domoticz_PiHole-Control</a>
+        See: <a href="https://github.com/janreimen/Domoticz-PiHole-Control">https://github.com/janreimen/Domoticz-PiHole-Control</a>
     </description>
     <params>
         <param field="Address" label="Pi-hole URL" width="300px" required="true" default="http://10.0.20.4"/>
