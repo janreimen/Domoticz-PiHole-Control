@@ -14,7 +14,7 @@ Idea based on abandoned plugin by [Xorfor] (https://forum.domoticz.com/viewtopic
 ## Installation
 ```bash
 cd ~/domoticz/plugins
-git clone https://github.com/janreimen/Domoticz_PiHole-Control.git PiHole
+git clone https://github.com/janreimen/Domoticz-PiHole-Control.git PiHole-HTTPS
 restart domoticz
 ```
 
