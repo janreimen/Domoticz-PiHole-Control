@@ -1,5 +1,5 @@
 """
-<plugin key="PiHole" name="Pi-hole Monitor and Control" author="Wojtek Sawasciuk, Jan Reimen" version="0.1.0" wikilink="https://github.com/janreimen/Domoticz-PiHole-Control" externallink="https://pi-hole.net/">
+<plugin key="PiHole" name="Pi-hole Monitor and Control - https Version" author="Wojtek Sawasciuk, Jan Reimen" version="0.1.0" wikilink="https://github.com/janreimen/Domoticz-PiHole-Control" externallink="https://pi-hole.net/">
     <description>
         <h2>Pi-hole Monitor and Control Plugin</h2><br/>
         Monitor Pi-hole statistics and control block lists and groups for parental control scheduling.<br/>
