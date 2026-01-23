@@ -2,7 +2,7 @@
 
 Monitor Pi-hole stats and control block lists from Domoticz. Built for Pi-hole v6 API.
 
-Idea based on abandoned plugin by [Xorfor] (https://forum.domoticz.com/viewtopic.php?t=20834) and worked on by [YoYo] (https://github.com/voyo/Domoticz_PiHole-Control/)
+Idea based on abandoned plugin by [Xorfor] (https://forum.domoticz.com/viewtopic.php?t=20834) and worked on by [Voyo] (https://github.com/voyo/Domoticz_PiHole-Control/)
 
 ## What it does
 
