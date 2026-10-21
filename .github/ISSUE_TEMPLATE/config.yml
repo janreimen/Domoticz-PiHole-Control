@@ -1,0 +1,11 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Domoticz community forum
+    url: https://forum.domoticz.com/
+    about: Ask general Domoticz usage questions and get help from the community.
+  - name: Pi-hole documentation and API reference
+    url: https://docs.pi-hole.net/api/
+    about: Questions about the Pi-hole itself, its settings or its API belong to the Pi-hole project.
+  - name: Domoticz-PiHole-Control repository
+    url: https://github.com/janreimen/Domoticz-PiHole-Control
+    about: Read the project documentation and review existing releases before opening an issue.

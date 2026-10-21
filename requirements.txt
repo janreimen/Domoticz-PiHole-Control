@@ -1,0 +1,2 @@
+# No third-party Python dependencies are required (standard library only, Python 3.7 or newer).
+# Development tools (optional): flake8, vermin   ->   pip install flake8 vermin

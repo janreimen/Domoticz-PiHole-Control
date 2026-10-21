@@ -1,0 +1,32 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.venv/
+venv/
+
+# build output
+dist/
+
+# editors / OS
+.idea/
+.vscode/
+*.swp
+*.swo
+.DS_Store
+
+# local material that does not belong in the repository
+*.patch
+*.bak
+.env
+.env.*
+*.secret
+archive/
+
+# certificates and keys never belong in the repository (the plugin only needs the path of a chain file)
+*.pem
+*.key
+*.crt
+*.csr

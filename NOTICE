@@ -1,0 +1,13 @@
+Domoticz-PiHole-Control
+Copyright 2026 Jan Reimen
+
+This product is licensed under the Apache License, Version 2.0 (see LICENSE).
+
+It is derived from Domoticz_PiHole-Control by Wojtek Sawasciuk (Voyo),
+https://github.com/voyo/Domoticz_PiHole-Control/ (Apache-2.0), which in turn
+builds on the idea of an abandoned Pi-hole plugin by Xorfor,
+https://forum.domoticz.com/viewtopic.php?t=20834.
+
+Changes by Jan Reimen: HTTPS support with a private certificate authority,
+Pi-hole v6 API, dynamic block list and group devices, and, as of 0.1.0, the
+restructuring into the pihole_control package with tests and documentation.

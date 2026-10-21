@@ -1,0 +1,129 @@
+name: Bug report
+description: Report a reproducible problem with Domoticz-PiHole-Control
+title: "[Bug]: "
+labels:
+  - bug
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thank you for reporting a problem.
+
+        Please search existing issues first. Never include Pi-hole passwords, app passwords, session ids, or unredacted personal data.
+
+  - type: input
+    id: plugin_version
+    attributes:
+      label: Plugin version
+      description: The version shown in the first plugin line of the Domoticz log ("Pi-hole Control X.Y.Z starting for ...").
+      placeholder: "e.g. 0.1.0"
+    validations:
+      required: true
+
+  - type: input
+    id: pihole_version
+    attributes:
+      label: Pi-hole version (core, FTL, web)
+      description: Shown at the bottom of the Pi-hole web interface. The plugin needs Pi-hole v6.
+      placeholder: "e.g. Core v6.1.2, FTL v6.2.3, Web v6.2.1"
+    validations:
+      required: true
+
+  - type: input
+    id: domoticz_version
+    attributes:
+      label: Domoticz version
+      description: Include the build or release identifier if available.
+      placeholder: "e.g. 2026.1"
+    validations:
+      required: true
+
+  - type: input
+    id: operating_system
+    attributes:
+      label: Operating system and Python version
+      placeholder: "e.g. Raspberry Pi OS (Trixie), Python 3.13"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: transport
+    attributes:
+      label: How does Domoticz reach the Pi-hole?
+      options:
+        - http
+        - https with a certificate from a public CA
+        - https with a private CA (Certificate Chain Path set)
+        - Other
+    validations:
+      required: true
+
+  - type: dropdown
+    id: issue_area
+    attributes:
+      label: Affected functionality
+      options:
+        - Installation or configuration
+        - Login / authentication
+        - TLS / certificates
+        - Statistics devices
+        - Block list or group switches
+        - Devices created, renamed or removed
+        - Upgrade from the plugin before 0.1.0
+        - Plugin startup or shutdown
+        - Other
+    validations:
+      required: true
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: Describe the problem
+      description: Explain what happens and why it is unexpected.
+    validations:
+      required: true
+
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. Configure the hardware...
+        2. Wait for an update / click the switch...
+        3. Observe the result...
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behaviour
+    validations:
+      required: true
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Relevant logs
+      description: Set the hardware's Debug setting to Debug first if you can. The plugin never writes passwords or session ids to the log, but check the text before you post it.
+      render: text
+    validations:
+      required: false
+
+  - type: textarea
+    id: additional
+    attributes:
+      label: Additional information
+      description: Does it happen every time? Did it work in an earlier version?
+    validations:
+      required: false
+
+  - type: checkboxes
+    id: checklist
+    attributes:
+      label: Before submitting
+      options:
+        - label: I searched existing issues for a similar problem.
+          required: true
+        - label: I removed passwords, tokens and private data from this report.
+          required: true
