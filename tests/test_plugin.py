@@ -9,6 +9,7 @@ import unittest
 import domoticz_stub as dz
 from fake_pihole import FakePiHole
 from helpers import ROOT
+from pihole_control import __version__
 
 RESERVED = {"Parameters", "Devices", "Images", "Settings"}          # injected into plugin.py by Domoticz
 
@@ -47,12 +48,23 @@ class PluginTests(unittest.TestCase):
         self.assertEqual(self.errors(), [])
         self.assertEqual(sorted(dz.Devices), list(range(1, 11)) + [100, 101, 200, 201])
         self.assertIn(("heartbeat", 10), dz.logs)
-        self.assertTrue(any("Pi-hole Control 0.1.0 starting for" in t for t in dz.messages("log")))
+        self.assertTrue(any("Pi-hole Control %s starting for" % __version__ in t for t in dz.messages("log")))
         plugin.onHeartbeat()
         plugin.onStop()
         self.assertEqual(self.ph.sessions, {})
         self.assertTrue(any("stopped" in t for t in dz.messages("log")))
         self.assertNotIn("secret", dz.all_text())
+
+    def test_devices_are_named_after_the_hardware_like_domoticz_does(self):
+        # Domoticz stores a plugin device as "<hardware name> - <name>"; a rename must keep that form
+        plugin = self.load(Name="Pi-hole")
+        dz.hardware_name = "Pi-hole"
+        plugin.onStart()
+        self.assertEqual(dz.Devices[100].Name, "Pi-hole - List: Ads (Default)")
+        self.ph.get_list(1)["comment"] = "Advertising"           # renamed in the Pi-hole web interface
+        plugin._plugin.controller.poll()
+        self.assertEqual(dz.Devices[100].Name, "Pi-hole - List: Advertising (Default)")
+        self.assertEqual(self.errors(), [])
 
     def test_commands_go_through_the_callback(self):
         plugin = self.load()

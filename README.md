@@ -15,7 +15,7 @@ lists and groups** on and off, for example for parental-control schedules ("Kids
 * **Modular.** API client, settings, device layer and polling logic are separate modules; only `plugin.py` touches
   Domoticz.
 
-> **Status:** version 0.1.0. Developed and tested against a simulated Pi-hole v6 (a real HTTP / TLS server inside
+> **Status:** version 0.1.1. Developed and tested against a simulated Pi-hole v6 (a real HTTP / TLS server inside
 > the test suite) and a simulated Domoticz, **not yet against a real Domoticz and a real Pi-hole**. Please read
 > [what is verified and what is not](#what-is-verified-and-what-is-not) and watch the log during your first run.
 
@@ -82,14 +82,22 @@ Several Pi-holes: add the hardware once per Pi-hole. Each gets its own set of de
 
 | Units | Devices | Created when |
 |---|---|---|
-| 1 - 9 | **Statistics**: DNS Queries Today, Ads Blocked Today, Ads Percentage, Domains in Blocklist, Queries Forwarded, Queries Cached, Clients Ever Seen, Unique Clients, Unique Domains (read-only) | missing at start |
-| 10 | **Pi-hole Status**: On while the Pi-hole answers, Off while it does not (read-only; switching it is refused and reset) | missing at start |
+| 1 - 9 | **Statistics**: DNS Queries Today, Ads Blocked Today, Ads Percentage, Domains in Blocklist, Queries Forwarded, Queries Cached, Clients Ever Seen, Unique Clients, Unique Domains (read-only) | missing (checked at start and at every poll) |
+| 10 | **Pi-hole Status**: On while the Pi-hole answers, Off while it does not (read-only; switching it is refused and reset) | missing (checked at start and at every poll) |
 | 100 - 199 | **Block lists**: one On/Off switch per list, named `List: <comment> (<groups>)` | the list exists in the Pi-hole |
 | 200 - 255 | **Groups**: one On/Off switch per group, named `Group: <name>` | the group exists in the Pi-hole |
 
 On = the list or group is **enabled** in the Pi-hole. Switching a device Off disables the list (it stops blocking) or
 the group (the Pi-hole stops applying that group's lists to its clients), exactly as the toggle in the Pi-hole web
 interface does.
+
+Every device is created **in use**, so nothing has to be added by hand under *Setup > Devices*, and every counter
+shows its **unit** (queries, blocked, domains, clients). A counter that an older version created without a unit gets
+it at start; a unit or a hidden state you chose yourself is never changed.
+
+**No devices after adding the hardware?** Domoticz only accepts new devices from plugins while *Setup > Settings >
+System > Accept new Hardware Devices* is on. The plugin says so once in the log and asks again every five minutes, so
+the devices appear as soon as you switch the setting on, without restarting the hardware.
 
 The full list with types, unit labels and API sources is generated from the code into
 **[docs/DEVICES.md](docs/DEVICES.md)**; the API calls the plugin uses are in **[docs/PIHOLE-API.md](docs/PIHOLE-API.md)**.
@@ -166,8 +174,9 @@ Set *Debug* to **Basic** first; **Debug** shows every request. The messages belo
 | `... TLS error: ... Check the certificate chain file` | the certificate is not trusted (set *Certificate Chain Path* to a PEM with root *and* sub CAs), expired, or the URL does not use the host name in the certificate (use `https://pi.hole`, not the IP address) |
 | `... the Pi-hole redirects to <address> - use that address as Pi-hole URL` | the URL redirects, for example http to https or to another host name; use the target address. The plugin never follows redirects, because a password must not be sent to a place you did not configure |
 | `... no answer within 10 s` or `Connection refused` | the Pi-hole or its web server is down, the address or port is wrong, or a firewall blocks it |
-| `Could not create the device of list N` / `No free Domoticz unit left for more lists` | more than 100 lists (or 56 groups): delete devices you do not need, or disable lists in the Pi-hole you do not control from Domoticz |
-| `Cannot update Domoticz unit N: no such device` | the device was deleted in Domoticz; it is created again on the next poll while the list or group exists |
+| `Domoticz did not create the device ...` | Domoticz refuses new devices while *Setup > Settings > System > Accept new Hardware Devices* is off. Switch it on; the plugin asks again every 5 minutes, no restart needed |
+| `No free Domoticz unit left for more lists` | more than 100 lists (or 56 groups): delete devices you do not need, or disable lists in the Pi-hole you do not control from Domoticz |
+| `Cannot update Domoticz unit N: no such device` | the device was deleted in Domoticz; it is created again at the next poll (a list or group device: while it exists in the Pi-hole) |
 | `The Pi-hole accepted the request but still reports list N (...) as enabled` | the Pi-hole did not apply the change (a gravity update in progress, or a second admin changed it back). Try again |
 | `Unexpected error in ...` | a bug: please open an issue with the line and, with Debug on, the lines after it |
 
@@ -188,7 +197,7 @@ Use whichever matches how you set up the Pi-hole.
 **Does the plugin change anything in the Pi-hole besides lists and groups?** No. It enables and disables lists and
 groups, it does not create, edit or delete anything, and it does not run gravity.
 
-**Can I disable "Pi-hole Status"?** Delete the device in Domoticz; it comes back at the next start of the hardware.
+**Can I disable "Pi-hole Status"?** Delete the device in Domoticz; it comes back at the next poll.
 The plugin needs it to show that the Pi-hole is unreachable.
 
 ## Upgrading from the plugin before 0.1.0
@@ -224,11 +233,19 @@ See the [CHANGELOG](CHANGELOG.md) for the complete list.
 * that `plugin.py` binds none of the names Domoticz injects, imports only the standard library and is the only
   module that imports `Domoticz`; Python 3.7 compatibility (`vermin`).
 
+**Checked against the sources, but not run:**
+
+* the Pi-hole API specification in the FTL repository (v6.8, October 2026): the calls, parameters and fields the
+  plugin uses are the ones the specification describes (see [docs/PIHOLE-API.md](docs/PIHOLE-API.md));
+* the source of the Domoticz plugin framework (master, October 2026): `Create()` honours `Used=1` and the unit of a
+  Custom Sensor, `Update()` supports `Name`, `Options`, `Used` and `SuppressTriggers`, a plugin device is stored as
+  `<hardware name> - <name>`, and new devices are refused while *Accept new Hardware Devices* is off.
+
 **Not verified:**
 
 * **a real Domoticz.** The stub follows the documentation, but Domoticz has details of its own. In particular the
   plugin renames a device with `Update(Name=...)` when the Pi-hole renames a list, which the Domoticz documentation
-  discourages; it is guarded and logged, and the old name stays when it fails.
+  discourages (the source of the plugin framework supports it); it is guarded and logged, and the old name stays when it fails.
 * **a real Pi-hole.** The fake server follows the Pi-hole API documentation; real replies may carry fields or
   differences it does not know. Fields the plugin does not understand are ignored, and a missing value leaves its
   device untouched.

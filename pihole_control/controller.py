@@ -63,6 +63,7 @@ class Controller:
             self.connected = True
             self.log.Log("Connected to the Pi-hole at %s" % self.settings.base_url)
         self._recovered("pihole", "The Pi-hole answers again")
+        self.devices.ensure_stat_devices()                      # devices Domoticz did not accept at first, units
         self.devices.update_stats(stats)
         self.devices.set_status(True)
 

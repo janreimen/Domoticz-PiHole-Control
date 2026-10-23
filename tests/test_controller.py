@@ -3,6 +3,7 @@ import unittest
 import domoticz_stub as dz
 from fake_pihole import FakePiHole
 from helpers import make_stack
+from pihole_control.constants import CREATE_RETRY_SECONDS
 
 
 class ControllerTests(unittest.TestCase):
@@ -30,6 +31,24 @@ class ControllerTests(unittest.TestCase):
         self.assertTrue(any("Connected to the Pi-hole" in text for text in dz.messages("log")))
         # one login and three reads per poll - the old plugin read lists and groups twice
         self.assertEqual([m for m, _ in self.ph.requests], ["POST", "GET", "GET", "GET"])
+
+    def test_devices_domoticz_refused_at_start_appear_later_without_a_restart(self):
+        dz.accept_new_devices = False                                    # "Accept new Hardware Devices" is off
+        self.start()
+        ours = [t for t in self.errors() if t.startswith("Domoticz did not create")]
+        self.assertEqual(len(ours), 1)
+        self.assertEqual([t for t in self.errors() if "Cannot update" in t], [])
+        self.assertEqual(dz.create_attempts, [1])                        # one refusal, not fourteen
+        self.assertEqual(dz.Devices, {})
+        self.assertTrue(any("Connected to the Pi-hole" in text for text in dz.messages("log")))
+        dz.accept_new_devices = True                                     # the user switches the setting on
+        self.clock.advance(CREATE_RETRY_SECONDS + 1)
+        self.controller.on_heartbeat()
+        self.assertEqual(sorted(dz.Devices), list(range(1, 11)) + [100, 101, 200, 201])
+        self.assertEqual(dz.Devices[1].sValue, "1234")
+        self.assertEqual((dz.Devices[10].nValue, dz.Devices[100].sValue), (1, "On"))
+        self.assertTrue(any("creates the devices of the Pi-hole now" in text for text in dz.messages("log")))
+        self.assertEqual(len([t for t in self.errors() if t.startswith("Domoticz did not create")]), 1)
 
     def test_polling_follows_the_interval_not_the_heartbeat(self):
         self.start()

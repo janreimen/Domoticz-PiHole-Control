@@ -5,6 +5,39 @@ All notable changes to this project are documented here. The format follows
 (`MAJOR.MINOR.PATCH`, optionally a fourth `.N` for small fixes) so that release tags work with plugin managers
 such as PyPluginStore.
 
+## [0.1.1] - 2026-10-22
+
+Found by reading the Pi-hole API specification (FTL 6.8) and the source of the Domoticz plugin framework against the
+code of 0.1.0. No change to units, names or settings.
+
+### Added
+- **Units on the counters.** A counter that exists without a unit (created by an older version, or by hand) gets its
+  unit (`queries`, `blocked`, `domains`, `clients`) at start. A unit you set yourself and a hidden device are never
+  changed, and only the options of the device are written, no value and no trigger.
+- **Devices Domoticz refused are created later.** While *Setup > Settings > System > Accept new Hardware Devices* is
+  off, Domoticz refuses new devices. The plugin now explains that once in the log, asks again every five minutes (at
+  most one refused request per round instead of one per device) and creates everything as soon as the setting is on,
+  without restarting the hardware. A recovery line is logged once.
+- `docs/PIHOLE-API.md`: coverage of the whole Pi-hole API (92 operations) with the candidates for further devices,
+  ranked by value and cost; `ROADMAP.md` follows it.
+- Tests: units, in-use state of every created device, refused creation (statistics, lists, groups, shared pause,
+  recovery, no error per device), rename, plugin name handling. The Domoticz stub now models the refusal, the hardware
+  name prefix and `SuppressTriggers`.
+
+### Changed
+- The statistics devices are checked at every poll, not only at start. A statistics device you delete in Domoticz
+  comes back at the next poll (it came back at the next start before).
+- `Cannot update Domoticz unit N` is not repeated per device while Domoticz refuses new devices; the one line about
+  the refusal explains it.
+- README: the verified section lists what was checked against the sources.
+
+### Fixed
+- Renaming a list or group device (after a rename in the Pi-hole) lost the `<hardware name> - ` prefix Domoticz puts
+  in front of every plugin device name, and rewrote the device's value, which can fire notifications and scenes.
+  The rename now keeps the prefix and changes only the name.
+- With *Accept new Hardware Devices* off, every poll logged an error for every list and group and made Domoticz log
+  its own refusal each time; the statistics devices were only retried after a restart.
+
 ## [0.1.0] - 2026-10-21
 
 First numbered release: the single-file plugin (`plugin.py`, about 800 lines, no tests, no changelog) was rewritten
@@ -68,4 +101,5 @@ are unchanged, so an installation is upgraded by replacing the files (see the up
   switched.
 - A new login was made every 10 heartbeats without logging out, using up the Pi-hole's limited number of sessions.
 
+[0.1.1]: https://github.com/janreimen/Domoticz-PiHole-Control/releases/tag/v0.1.1
 [0.1.0]: https://github.com/janreimen/Domoticz-PiHole-Control/releases/tag/v0.1.0

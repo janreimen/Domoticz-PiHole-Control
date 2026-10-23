@@ -3,13 +3,15 @@
 It is handed the ``Domoticz`` module and a callable returning the current ``Devices`` dict (Domoticz replaces
 that dict before every callback, so it is never kept), and turns Pi-hole data into devices:
 
-    * 10 fixed statistics devices (units 1-10), created when missing
+    * 10 fixed statistics devices (units 1-10), created when missing - also later, when Domoticz did not accept new
+      devices at first ("Accept new Hardware Devices" is off); a counter that has no unit gets one
     * one switch per Pi-hole list (units 100-199) and per group (units 200-255); the Pi-hole id sits in the
       device description ("ListID:12" / "GroupID:3"), so a device finds its list again after a restart
     * new lists / groups get a device; a device is deleted only after its list / group has been gone for
       REMOVE_AFTER_MISSES polls in a row (a glitch in one answer must not destroy a device and its history)
     * a device is renamed when its name changes *in the Pi-hole*; a name you chose in Domoticz is never
-      overwritten at start-up
+      overwritten at start-up. Domoticz names a plugin device "<hardware name> - <name>", the rename keeps that form
+    * every device is created "in use" (Used=1), so nothing has to be added by hand under Setup > Devices
     * values are written when they change, sensors also every REFRESH_SECONDS so the "last seen" time stays fresh
 """
 import re
@@ -17,10 +19,10 @@ import time
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
 from .constants import (
-    GROUP_NAME_PREFIX, GROUP_PREFIX, GROUP_UNIT_FIRST, GROUP_UNIT_LAST, KIND_COUNT, KIND_PERCENT, KIND_STATUS,
-    LIST_NAME_PREFIX, LIST_PREFIX, LIST_UNIT_FIRST, LIST_UNIT_LAST, MAX_NAME_LENGTH, REFRESH_SECONDS,
-    REMOVE_AFTER_MISSES, STAT_DEVICES, SWITCHTYPE_ONOFF, TYPENAME_COUNT, TYPENAME_PERCENT, TYPENAME_SWITCH,
-    UNIT_STATUS, StatDevice,
+    CREATE_RETRY_SECONDS, GROUP_NAME_PREFIX, GROUP_PREFIX, GROUP_UNIT_FIRST, GROUP_UNIT_LAST, KIND_COUNT,
+    KIND_PERCENT, KIND_STATUS, LIST_NAME_PREFIX, LIST_PREFIX, LIST_UNIT_FIRST, LIST_UNIT_LAST, MAX_NAME_LENGTH,
+    REFRESH_SECONDS, REMOVE_AFTER_MISSES, STAT_DEVICES, SUBTYPE_CUSTOM, SWITCHTYPE_ONOFF, TYPENAME_COUNT,
+    TYPENAME_PERCENT, TYPENAME_SWITCH, UNIT_STATUS, StatDevice,
 )
 from .model import BlockList, Group, Stats
 from .util import shorten
@@ -68,13 +70,22 @@ def group_device_name(item: Group) -> str:
     return shorten(GROUP_NAME_PREFIX + (item.name.strip() or "Unnamed Group"), MAX_NAME_LENGTH)
 
 
+def _custom_unit(options_text: str) -> str:
+    """The unit of a Custom Sensor: Domoticz keeps it as "<axis>;<unit>" in the device options."""
+    return options_text.partition(";")[2].strip()
+
+
 class DeviceManager:
     def __init__(self, domoticz: Any, get_devices: Callable[[], Dict[int, Any]], logger: Any,
-                 clock: Callable[[], float] = time.monotonic) -> None:
+                 clock: Callable[[], float] = time.monotonic, hardware_name: str = "") -> None:
         self.dz = domoticz
         self.get_devices = get_devices
         self.log = logger
         self.clock = clock
+        self.hardware_name = hardware_name      # Domoticz stores a device as "<hardware name> - <name>"
+        self._paused_until = 0.0                # Domoticz refused to create a device: no new attempt before this
+        self._creation_refused = False
+        self._unit_checked: set = set()         # statistics units whose unit label was looked at since start
         self.lists = _Mapping("list", LIST_PREFIX, LIST_UNIT_FIRST, LIST_UNIT_LAST)
         self.groups = _Mapping("group", GROUP_PREFIX, GROUP_UNIT_FIRST, GROUP_UNIT_LAST)
         self._written: Dict[int, float] = {}    # unit -> time of the last write (sensors)
@@ -82,14 +93,58 @@ class DeviceManager:
 
     # -- start-up -------------------------------------------------------------------------------------------
     def ensure_stat_devices(self) -> None:
+        """Create the statistics devices that are missing and give counters without a unit their unit.
+
+        Called at start and by every poll: a device Domoticz did not accept at first (the setting "Accept new
+        Hardware Devices" is off) appears as soon as the setting is on, without restarting the hardware."""
         for spec in STAT_DEVICES:
-            if spec.unit in self.get_devices():
+            device = self.get_devices().get(spec.unit)
+            if device is not None:
+                self._add_missing_unit(device, spec)
                 continue
+            if self._creation_paused():
+                return
             self.dz.Device(**self._stat_kwargs(spec)).Create()
             if spec.unit not in self.get_devices():
-                self.log.Error("Could not create device '%s' (unit %d)" % (spec.name, spec.unit))
-            else:
-                self.log.Basic("Created device '%s' (unit %d)" % (spec.name, spec.unit))
+                self._creation_failed("'%s' (unit %d)" % (spec.name, spec.unit))
+                return                      # the reason is the same for all of them: ask Domoticz once, not ten times
+            self._creation_worked()
+            self.log.Basic("Created device '%s' (unit %d)" % (spec.name, spec.unit))
+
+    def _add_missing_unit(self, device: Any, spec: StatDevice) -> None:
+        """A counter created without a unit (by an older plugin or by hand) gets the unit it should have.
+
+        A unit you set yourself stays, and a device is looked at once per start."""
+        if spec.kind != KIND_COUNT or not spec.label or spec.unit in self._unit_checked:
+            return
+        self._unit_checked.add(spec.unit)
+        if getattr(device, "SubType", None) != SUBTYPE_CUSTOM:
+            return                          # not a Custom Sensor any more: not ours to change
+        if _custom_unit((getattr(device, "Options", None) or {}).get("Custom", "")):
+            return
+        try:
+            device.Update(nValue=device.nValue, sValue=device.sValue, Options={"Custom": "1;%s" % spec.label},
+                          SuppressTriggers=True)        # only the options: the value and its triggers stay as they are
+        except Exception as exc:
+            self.log.Error("Could not add the unit '%s' to '%s': %s" % (spec.label, spec.name, exc))
+            return
+        self.log.Log("Added the unit '%s' to '%s' (unit %d)" % (spec.label, spec.name, spec.unit))
+
+    def _creation_paused(self) -> bool:
+        return self.clock() < self._paused_until
+
+    def _creation_failed(self, what: str) -> None:
+        self._paused_until = self.clock() + CREATE_RETRY_SECONDS
+        if not self._creation_refused:
+            self._creation_refused = True
+            self.log.Error("Domoticz did not create the device %s. If its log says that the settings prevent accepting "
+                           "new devices, switch on Setup > Settings > System > 'Accept new Hardware Devices'. "
+                           "The plugin asks again every %d minutes" % (what, CREATE_RETRY_SECONDS // 60))
+
+    def _creation_worked(self) -> None:
+        if self._creation_refused:
+            self._creation_refused = False
+            self.log.Log("Domoticz creates the devices of the Pi-hole now")
 
     @staticmethod
     def _stat_kwargs(spec: StatDevice) -> Dict[str, Any]:
@@ -180,6 +235,8 @@ class DeviceManager:
         return None
 
     def _create_switch(self, mapping: _Mapping, item_id: int, name: str) -> Optional[int]:
+        if self._creation_paused():
+            return None
         unit = self._free_unit(mapping)
         if unit is None:
             if not mapping.warned_full:
@@ -190,8 +247,9 @@ class DeviceManager:
         self.dz.Device(Name=name, Unit=unit, TypeName=TYPENAME_SWITCH, Switchtype=SWITCHTYPE_ONOFF,
                        Description="%s%d" % (mapping.prefix, item_id), Used=1).Create()
         if unit not in self.get_devices():
-            self.log.Error("Could not create the device of %s %d (unit %d)" % (mapping.kind, item_id, unit))
+            self._creation_failed("of %s %d (unit %d)" % (mapping.kind, item_id, unit))
             return None
+        self._creation_worked()
         mapping.units[item_id] = unit
         mapping.names[item_id] = name
         self.log.Log("Created device for %s %d: %s (unit %d)" % (mapping.kind, item_id, name, unit))
@@ -205,8 +263,11 @@ class DeviceManager:
         if known == name:
             return
         device = self.get_devices().get(unit)
+        full_name = "%s - %s" % (self.hardware_name, name) if self.hardware_name else name
         try:
-            device.Update(nValue=device.nValue, sValue=device.sValue, Name=name)
+            # Domoticz stores the name exactly as given (no hardware prefix is added), and SuppressTriggers keeps
+            # the value, notifications and scenes out of a rename
+            device.Update(nValue=device.nValue, sValue=device.sValue, Name=full_name, SuppressTriggers=True)
         except Exception as exc:                  # renaming is a convenience: never let it break the sync
             if "rename" not in self._warned:
                 self._warned.add("rename")
@@ -252,10 +313,10 @@ class DeviceManager:
     def _write(self, unit: int, nvalue: int, svalue: str, now: Optional[float] = None) -> None:
         device = self.get_devices().get(unit)
         if device is None:
-            if ("missing", unit) not in self._warned:
+            if ("missing", unit) not in self._warned and not self._creation_refused:      # refused: already explained
                 self._warned.add(("missing", unit))
-                self.log.Error("Cannot update Domoticz unit %d: no such device. It was deleted or never created; "
-                               "restarting the hardware creates the statistics devices again" % unit)
+                self.log.Error("Cannot update Domoticz unit %d: no such device. It was deleted or Domoticz did not "
+                               "create it; the plugin creates it again as soon as Domoticz accepts new devices" % unit)
             return
         self._warned.discard(("missing", unit))
         changed = device.nValue != nvalue or device.sValue != svalue

@@ -6,7 +6,7 @@ The plugin creates the devices below. The unit numbers are the ones of the plugi
 
 ## Statistics (units 1-10)
 
-Created when missing, read-only. Values come from the reply of `GET /api/stats/summary`.
+Created when missing (at start and at every poll), read-only, in use from the start; counters show their unit. Values come from the reply of `GET /api/stats/summary`.
 
 | Unit | Name | Type | Unit label | Source |
 |---:|---|---|---|---|
@@ -49,4 +49,6 @@ One On/Off switch per group of the Pi-hole. On = the group is enabled.
 - A list or group that is gone from the Pi-hole loses its device only after it was missing for 3 polls in a row, so one odd answer can not delete a device and its history.
 - A device is renamed when its name changes *in the Pi-hole* while the plugin runs. A name you choose in Domoticz is never overwritten when the plugin starts.
 - Do not edit the **Description** of a list or group device: it is the link to the Pi-hole.
-- A device you delete in Domoticz is created again on the next poll while its list or group exists.
+- A device you delete in Domoticz is created again on the next poll (a list or group device: while it exists in the Pi-hole).
+- Every device is created *in use* (visible), so nothing has to be added by hand under Setup > Devices. A counter that was created without a unit gets its unit at start; a unit or a hidden state you set yourself is never changed.
+- Domoticz refuses new devices while *Setup > Settings > System > Accept new Hardware Devices* is off. The plugin says so once in the log and asks again every 5 minutes (statistics, lists and groups alike), so the devices appear as soon as the setting is on, without restarting the hardware.

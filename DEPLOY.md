@@ -101,10 +101,14 @@ plugins with the same key compete.
 1. *Setup > Hardware*, type **Pi-hole Monitor and Control - https Version**, name it (for example `Pi-hole`).
 2. *Pi-hole URL* (for example `https://pi.hole`), the app password, and for a private CA the path of the certificate
    chain. Leave the rest at the defaults.
-3. *Add*. The log shows `Pi-hole Control 0.1.0 starting for ...` and, after the first poll, `Connected to the Pi-hole
+3. *Add*. The log shows `Pi-hole Control <version> starting for ...` and, after the first poll, `Connected to the Pi-hole
    at ...` and the created devices.
 
 All fields are explained in the [README](README.md#settings).
+
+**No devices appear?** Domoticz only accepts new devices from plugins while *Setup > Settings > System > Accept new
+Hardware Devices* is on. The plugin says so once in the log (`Domoticz did not create the device ...`) and asks again
+every five minutes: switch the setting on and the devices appear without a restart.
 
 ## 4. Verify
 
@@ -137,6 +141,7 @@ in the log, but check the text before you post it.
 |---|---|
 | Hardware type "Pi-hole Monitor and Control - https Version" is not in the list | Domoticz was not restarted, the directory is not directly below `plugins/`, or `plugin.py` is not readable by the Domoticz user. See the Domoticz log at start-up |
 | `ModuleNotFoundError: No module named 'pihole_control'` | the `pihole_control/` directory is missing or not next to `plugin.py` (copied only `plugin.py`) |
+| Hardware added, but no devices | *Setup > Settings > System > Accept new Hardware Devices* is off (see the log line `Domoticz did not create the device ...`). Switch it on, wait up to five minutes |
 | Two hardware types / duplicate plugin errors | a second copy of the plugin sits in `plugins/` (backup folder, old version): remove it |
 | The old behaviour is still there after an update | Domoticz keeps the old modules in memory: restart Domoticz, a hardware reload is not enough when a module was added or renamed |
 | `deploy.sh`: `not writable ... sudo needs a password` | log in as the Domoticz user or root, or allow passwordless sudo for the SSH user |

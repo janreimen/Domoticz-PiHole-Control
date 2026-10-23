@@ -2,7 +2,7 @@ import unittest
 
 import domoticz_stub as dz
 from helpers import Clock, make_logger
-from pihole_control.constants import REFRESH_SECONDS, REMOVE_AFTER_MISSES, STAT_DEVICES
+from pihole_control.constants import CREATE_RETRY_SECONDS, KIND_COUNT, REFRESH_SECONDS, REMOVE_AFTER_MISSES, STAT_DEVICES
 from pihole_control.devices import DeviceManager, group_device_name, list_device_name
 from pihole_control.model import BlockList, Group, Stats
 
@@ -199,6 +199,209 @@ class DeviceTests(unittest.TestCase):
         self.dm.restore(100)
         self.assertEqual(dz.Devices[100].updates, before + 1)
         self.assertEqual(self.dm.name_of(100), "List: List")
+
+
+
+class UnitTests(unittest.TestCase):
+    """Counters show their unit; a counter that was created without one gets it."""
+
+    def setUp(self):
+        dz.reset()
+        self.clock = Clock()
+        self.log = make_logger()
+        self.dm = DeviceManager(dz, lambda: dz.Devices, self.log, clock=self.clock)
+        self.dm.ensure_stat_devices()
+
+    def fresh(self):
+        return DeviceManager(dz, lambda: dz.Devices, self.log, clock=self.clock)       # = after a restart
+
+    def counters(self):
+        return [spec for spec in STAT_DEVICES if spec.kind == KIND_COUNT]
+
+    def test_every_counter_is_created_with_its_unit(self):
+        self.assertEqual(len(self.counters()), 8)
+        for spec in self.counters():
+            self.assertEqual(dz.Devices[spec.unit].Options, {"Custom": "1;%s" % spec.label}, spec.name)
+            self.assertTrue(spec.label, spec.name)
+
+    def test_a_counter_without_a_unit_gets_its_unit_and_keeps_its_value(self):
+        device = dz.Devices[1]
+        device.Options, device.nValue, device.sValue = {}, 0, "42"
+        self.fresh().ensure_stat_devices()
+        self.assertEqual(device.Options, {"Custom": "1;queries"})
+        self.assertEqual((device.nValue, device.sValue, device.Used), (0, "42", 1))
+        self.assertEqual(len(device.update_calls), 1)
+        self.assertTrue(device.update_calls[0]["SuppressTriggers"])       # only the options change, no triggers fire
+        self.assertIsNone(device.update_calls[0]["Used"])
+        self.assertTrue(any("Added the unit 'queries'" in t for t in dz.messages("log")))
+
+    def test_every_counter_gets_its_own_unit(self):
+        for spec in self.counters():
+            dz.Devices[spec.unit].Options = {"Custom": "1"}                # an axis, but no unit
+        self.fresh().ensure_stat_devices()
+        for spec in self.counters():
+            self.assertEqual(dz.Devices[spec.unit].Options, {"Custom": "1;%s" % spec.label}, spec.name)
+
+    def test_percentage_and_status_devices_are_never_touched(self):
+        self.fresh().ensure_stat_devices()
+        self.assertEqual(dz.Devices[3].update_calls, [])
+        self.assertEqual(dz.Devices[10].update_calls, [])
+
+    def test_a_unit_you_chose_stays(self):
+        dz.Devices[1].Options = {"Custom": "1;requests"}
+        self.fresh().ensure_stat_devices()
+        self.assertEqual(dz.Devices[1].Options, {"Custom": "1;requests"})
+        self.assertEqual(dz.Devices[1].update_calls, [])
+
+    def test_a_device_that_is_no_longer_a_custom_sensor_is_left_alone(self):
+        dz.Devices[1].SubType, dz.Devices[1].Options = 6, {}
+        self.fresh().ensure_stat_devices()
+        self.assertEqual(dz.Devices[1].update_calls, [])
+
+    def test_a_device_is_looked_at_once_per_start(self):
+        device = dz.Devices[1]
+        device.Options = {}
+        calls = []
+        device.Update = lambda **kw: calls.append(kw)                      # Domoticz that ignores the change
+        manager = self.fresh()
+        for _ in range(3):
+            manager.ensure_stat_devices()
+        self.assertEqual(len(calls), 1)
+
+    def test_a_failing_update_is_reported_and_does_not_break_the_start(self):
+        device = dz.Devices[1]
+        device.Options = {}
+
+        def boom(**_):
+            raise RuntimeError("no way")
+        device.Update = boom
+        self.fresh().ensure_stat_devices()
+        self.assertTrue(any("Could not add the unit 'queries'" in t and "no way" in t for t in dz.messages("error")))
+
+    def test_the_used_state_of_an_existing_device_is_the_users_choice(self):
+        dz.Devices[2].Used = 0                                             # hidden on purpose
+        dz.Devices[2].Options = {}
+        self.fresh().ensure_stat_devices()
+        self.assertEqual(dz.Devices[2].Used, 0)
+        self.assertIsNone(dz.Devices[2].update_calls[-1]["Used"])
+
+
+class UsedTests(unittest.TestCase):
+    def setUp(self):
+        dz.reset()
+        self.dm = DeviceManager(dz, lambda: dz.Devices, make_logger(), clock=Clock())
+
+    def test_every_device_the_plugin_creates_is_in_use_from_the_start(self):
+        self.dm.ensure_stat_devices()
+        self.dm.sync_lists([lst(1), lst(2, enabled=False)], {})
+        self.dm.sync_groups([grp(0, "Default"), grp(1, "Kids", False)])
+        self.assertEqual(len(dz.Devices), 14)
+        self.assertEqual([unit for unit, d in dz.Devices.items() if d.Used != 1], [])
+        for device in dz.Devices.values():
+            self.assertEqual(device.kw.get("Used"), 1)                     # asked for explicitly, not left to a default
+
+
+class CreationRefusedTests(unittest.TestCase):
+    """Domoticz refuses new devices while "Accept new Hardware Devices" is off. The plugin says so once, does not
+    nag Domoticz, and creates everything as soon as the setting is on - without restarting the hardware."""
+
+    def setUp(self):
+        dz.reset()
+        self.clock = Clock()
+        self.dm = DeviceManager(dz, lambda: dz.Devices, make_logger(), clock=self.clock)
+        dz.accept_new_devices = False
+
+    def ours(self):
+        return [t for t in dz.messages("error") if t.startswith("Domoticz did not create")]
+
+    def test_statistics_devices_ask_domoticz_once_and_explain_once(self):
+        self.dm.ensure_stat_devices()
+        self.assertEqual(dz.create_attempts, [1])                          # not ten refusals from Domoticz
+        self.assertEqual(len(self.ours()), 1)
+        self.assertIn("Accept new Hardware Devices", self.ours()[0])
+        self.clock.advance(60)
+        self.dm.ensure_stat_devices()
+        self.assertEqual(dz.create_attempts, [1])                          # inside the retry window: no new attempt
+        self.clock.advance(CREATE_RETRY_SECONDS)
+        self.dm.ensure_stat_devices()
+        self.assertEqual(dz.create_attempts, [1, 1])                       # asked again ...
+        self.assertEqual(len(self.ours()), 1)                              # ... but the explanation is not repeated
+
+    def test_the_devices_appear_when_the_setting_is_switched_on(self):
+        self.dm.ensure_stat_devices()
+        self.assertEqual(dz.Devices, {})
+        dz.accept_new_devices = True
+        self.clock.advance(CREATE_RETRY_SECONDS + 1)
+        self.dm.ensure_stat_devices()
+        self.assertEqual(sorted(dz.Devices), list(range(1, 11)))
+        self.assertEqual(len([t for t in dz.messages("log") if "creates the devices of the Pi-hole now" in t]), 1)
+        self.dm.ensure_stat_devices()
+        self.assertEqual(len([t for t in dz.messages("log") if "creates the devices of the Pi-hole now" in t]), 1)
+
+    def test_list_and_group_switches_ask_once_per_window(self):
+        items = [lst(i) for i in range(1, 6)]
+        self.dm.sync_lists(items, {})
+        self.dm.sync_groups([grp(1, "Kids")])
+        self.assertEqual(dz.create_attempts, [100])                        # one attempt covers lists and groups
+        self.assertEqual(len(self.ours()), 1)
+        self.assertIn("list 1", self.ours()[0])
+        dz.accept_new_devices = True
+        self.clock.advance(CREATE_RETRY_SECONDS + 1)
+        self.dm.sync_lists(items, {})
+        self.dm.sync_groups([grp(1, "Kids")])
+        self.assertEqual(sorted(dz.Devices), [100, 101, 102, 103, 104, 200])
+        self.assertEqual(self.dm.resolve(104), ("list", 5))
+
+    def test_statistics_and_switches_share_the_pause(self):
+        self.dm.ensure_stat_devices()
+        self.dm.sync_lists([lst(1)], {})
+        self.assertEqual(dz.create_attempts, [1])
+
+    def test_updating_a_device_that_was_refused_does_not_add_error_lines(self):
+        self.dm.ensure_stat_devices()
+        self.dm.update_stats(Stats(1, 2, 3.0, 4, 5, 6, 7, 8, 9))
+        self.dm.set_status(True)
+        self.assertEqual([t for t in dz.messages("error") if "Cannot update" in t], [])
+
+    def test_a_device_that_is_missing_while_creation_works_is_still_reported_once(self):
+        dz.accept_new_devices = True
+        self.dm.ensure_stat_devices()
+        del dz.Devices[1]
+        self.dm.update_stats(Stats(1, 2, 3.0, 4, 5, 6, 7, 8, 9))
+        self.dm.update_stats(Stats(1, 2, 3.0, 4, 5, 6, 7, 8, 9))
+        self.assertEqual(len([t for t in dz.messages("error") if "Cannot update Domoticz unit 1" in t]), 1)
+
+
+class RenameTests(unittest.TestCase):
+    """Domoticz stores a plugin device as "<hardware name> - <name>" and Update(Name=...) stores the name as given."""
+
+    def setUp(self):
+        dz.reset()
+        dz.hardware_name = "Pi-hole"
+        self.dm = DeviceManager(dz, lambda: dz.Devices, make_logger(), clock=Clock(), hardware_name="Pi-hole")
+
+    def test_a_rename_keeps_the_hardware_prefix(self):
+        self.dm.sync_lists([lst(1, "Ads")], {})
+        self.assertEqual(dz.Devices[100].Name, "Pi-hole - List: Ads")
+        self.dm.sync_lists([lst(1, "Advertising")], {})
+        self.assertEqual(dz.Devices[100].Name, "Pi-hole - List: Advertising")
+
+    def test_a_rename_changes_the_name_only(self):
+        self.dm.sync_groups([grp(3, "Kids")])
+        device = dz.Devices[200]
+        before = (device.nValue, device.sValue, device.updates)
+        self.dm.sync_groups([grp(3, "Children")])
+        self.assertEqual(device.Name, "Pi-hole - Group: Children")
+        self.assertEqual((device.nValue, device.sValue), before[:2])
+        self.assertEqual(device.updates, before[2] + 1)                    # exactly the rename
+        self.assertTrue(device.update_calls[-1]["SuppressTriggers"])       # no notification, no scene
+
+    def test_without_a_hardware_name_the_plain_name_is_used(self):
+        dz.hardware_name = ""
+        dm = DeviceManager(dz, lambda: dz.Devices, make_logger(), clock=Clock())
+        dm.sync_groups([grp(3, "Kids")])
+        dm.sync_groups([grp(3, "Children")])
+        self.assertEqual(dz.Devices[200].Name, "Group: Children")
 
 
 if __name__ == "__main__":

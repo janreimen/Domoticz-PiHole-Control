@@ -1,11 +1,18 @@
 """Minimal stand-in for Domoticz' embedded ``Domoticz`` module, for tests."""
 Devices = {}
 logs = []
+accept_new_devices = True       # Domoticz' setting "Accept new Hardware Devices"
+hardware_name = ""              # Domoticz stores a plugin device as "<hardware name> - <name>"
+create_attempts = []            # every Device(...).Create() call, accepted or not
 
 
 def reset():
+    global accept_new_devices, hardware_name
     Devices.clear()
     logs.clear()
+    create_attempts.clear()
+    accept_new_devices = True
+    hardware_name = ""
 
 
 def Log(text): logs.append(("log", text))
@@ -19,7 +26,7 @@ def Heartbeat(seconds): logs.append(("heartbeat", seconds))
 class StubDevice:
     def __init__(self, **kw):
         self.kw = kw
-        self.Name = kw["Name"]
+        self.Name = "%s - %s" % (hardware_name, kw["Name"]) if hardware_name else kw["Name"]
         self.Unit = kw["Unit"]
         self.TypeName = kw.get("TypeName")
         # what Domoticz derives from a TypeName (hardwaretypes.h: pTypeGeneral 243, pTypeGeneralSwitch 244)
@@ -32,12 +39,20 @@ class StubDevice:
         self.nValue = 0
         self.sValue = ""
         self.updates = 0
+        self.update_calls = []          # the keyword arguments of every Update(...) beyond nValue / sValue
         self.deleted = False
 
-    def Update(self, nValue, sValue, Name=None, **_):
-        self.nValue, self.sValue = nValue, sValue
+    def Update(self, nValue, sValue, Name=None, Options=None, Used=None, SuppressTriggers=False, **other):
+        """Like Domoticz' CDevice_update: with SuppressTriggers the value is NOT written, other fields are."""
+        self.update_calls.append(dict(Name=Name, Options=Options, Used=Used, SuppressTriggers=SuppressTriggers, **other))
+        if not SuppressTriggers:
+            self.nValue, self.sValue = nValue, sValue
         if Name is not None:
             self.Name = Name
+        if Options is not None:
+            self.Options = dict(Options)
+        if Used is not None:
+            self.Used = Used
         self.updates += 1
 
     def Delete(self):
@@ -52,6 +67,10 @@ class Device:
         self.kw = kw
 
     def Create(self):
+        create_attempts.append(self.kw["Unit"])
+        if not accept_new_devices:
+            Error("Device creation failed, Domoticz settings prevent accepting new devices.")
+            return
         Devices[self.kw["Unit"]] = StubDevice(**self.kw)
 
 

@@ -1,5 +1,5 @@
 """
-<plugin key="PiHole" name="Pi-hole Monitor and Control - https Version" author="Wojtek Sawasciuk, Jan Reimen" version="0.1.0" wikilink="https://github.com/janreimen/Domoticz-PiHole-Control" externallink="https://pi-hole.net/">
+<plugin key="PiHole" name="Pi-hole Monitor and Control - https Version" author="Wojtek Sawasciuk, Jan Reimen" version="0.1.1" wikilink="https://github.com/janreimen/Domoticz-PiHole-Control" externallink="https://pi-hole.net/">
     <description>
         <h2>Pi-hole Monitor and Control</h2><br/>
         Monitors a <b>Pi-hole v6</b> and switches its block lists and groups from Domoticz, for example for
@@ -92,7 +92,8 @@ class BasePlugin:
             log.Log("Trusting the certificates in %s" % settings.ca_file)
 
         client = PiHoleClient(settings.base_url, settings.password, log, ssl_context, settings.timeout)
-        controller = Controller(settings, client, DeviceManager(Domoticz, lambda: Devices, log), log)
+        devices = DeviceManager(Domoticz, lambda: Devices, log, hardware_name=Parameters.get("Name", ""))
+        controller = Controller(settings, client, devices, log)
         Domoticz.Heartbeat(HEARTBEAT_SECONDS)
         try:
             controller.start()

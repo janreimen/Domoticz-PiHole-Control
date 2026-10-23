@@ -26,6 +26,7 @@ SESSION_RENEW_MARGIN = 30     # log in again this many seconds before the Pi-hol
 DEFAULT_SESSION_VALIDITY = 300
 REMOVE_AFTER_MISSES = 3       # a list / group must be gone for this many polls in a row before its device is deleted
 REFRESH_SECONDS = 300         # rewrite an unchanged sensor value this often, so Domoticz' sensor time-out never fires
+CREATE_RETRY_SECONDS = 300    # after Domoticz refused to create a device, ask again no sooner than this
 
 # -- device kinds -------------------------------------------------------------------------------------------
 KIND_COUNT = "count"          # Custom Sensor with a unit label
@@ -38,6 +39,7 @@ TYPENAME_COUNT = "Custom"
 TYPENAME_PERCENT = "Percentage"
 TYPENAME_SWITCH = "Switch"
 SWITCHTYPE_ONOFF = 0
+SUBTYPE_CUSTOM = 31           # what Domoticz makes of TypeName "Custom" (sTypeCustom, 0x1F in hardwaretypes.h)
 
 
 class StatDevice(NamedTuple):

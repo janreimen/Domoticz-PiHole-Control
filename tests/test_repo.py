@@ -136,7 +136,8 @@ class DocumentationTests(unittest.TestCase):
         fragments = ["No Pi-hole password configured", "must start with http:// or https://",
                      "Certificate chain file not found", "Login rejected", "Check the certificate chain file",
                      "use that address as Pi-hole URL", "no answer within", "No free Domoticz unit left",
-                     "Cannot update Domoticz unit", "still reports", "Unexpected error in", "Pi-hole poll failed"]
+                     "Cannot update Domoticz unit", "still reports", "Unexpected error in", "Pi-hole poll failed",
+                     "Domoticz did not create the device", "Accept new Hardware Devices"]
         code, readme = source_text(), read("README.md")
         for fragment in fragments:
             self.assertTrue(fragment in code, "no longer in the code: " + fragment)
